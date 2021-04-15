@@ -351,3 +351,6 @@ MigrationBackup/
 
 # Virtual Environment
 /deepLearning4ImageAnalysis
+
+# MNIST Dataset
+/feedForward_backprop_neuralNetwork/MNIST
