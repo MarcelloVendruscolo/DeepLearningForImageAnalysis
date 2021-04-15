@@ -1,0 +1,206 @@
+import numpy as np
+from load_mnist import load_mnist
+import matplotlib.pyplot as plt
+import math
+
+class feedforward_backprop_neuralNetwork():
+
+    def __init__(self, model):
+        self.model = model
+        self.model_state = {}
+        self.L = len(self.model)
+        self.number_images = 0
+        self.costs = []
+
+    def initialise_parameters(self, x_train, y_train):
+        # observation_dimension: number of features taken into consideration of the input
+        # returns weights and offsets as a vectors
+        mu, sigma = 0, 0.01
+
+        self.number_images = x_train.shape[0]
+        input_dimension = x_train.shape[1]
+        number_classes = y_train.shape[1]
+
+        for layer in self.model.keys():
+            self.model_state[layer] = {}
+            output_dimension = model[layer]['nodes']
+            weight_matrix = np.random.normal(mu, sigma, size=(output_dimension, input_dimension))
+            offset_b = np.zeros((output_dimension, 1))
+            self.model_state[layer]['weights'] = weight_matrix
+            self.model_state[layer]['offset_b'] = offset_b
+            input_dimension = output_dimension
+        
+        self.model_state['output_layer'] = {}
+        weight_matrix = np.random.normal(mu, sigma, size=(number_classes, input_dimension))
+        offset_b = np.zeros((number_classes, 1))
+        self.model_state['output_layer']['weights'] = weight_matrix
+        self.model_state['output_layer']['offset_b'] = offset_b
+
+        for layer in self.model_state.keys():
+            print('\nLayer: ' + str(layer))
+            print('Weights shape: ' + str(self.model_state[layer]['weights'].shape))
+            print('Offset shape: ' + str(self.model_state[layer]['offset_b'].shape))
+    
+    def linear_forward(self, x, weights, offset_b):
+        return weights.dot(x) + offset_b
+
+    def sigmoid(self, Z):
+        return 1 / (1 + np.exp(-Z))
+    
+    def relu(self, Z):
+        return np.maximum(0, Z)
+    
+    def softmax(self, Z):
+        tmp = np.exp(Z - np.max(Z))
+        return  tmp / tmp.sum(axis=0, keepdims=True)
+    
+    def activation_forward(self, Z, activation_model):
+        if activation_model == 'sigmoid':
+            return self.sigmoid(Z)
+        elif activation_model == 'relu':
+            return self.relu(Z)
+        elif activation_model == 'softmax':
+            return self.softmax(Z)
+        else:
+            raise Exception('Non-supported activation function')
+    
+    def model_forward(self, input_data):
+        input_to_next_layer = input_data.T
+
+        for layer in self.model_state.keys():
+            self.model_state[layer]['linear_input'] = input_to_next_layer
+            self.model_state[layer]['linear_output'] = self.linear_forward(input_to_next_layer, self.model_state[layer]['weights'], self.model_state[layer]['offset_b'])
+            
+            if layer != 'output_layer':
+                self.model_state[layer]['activation_model'] = 'relu'
+                self.model_state[layer]['activation_output'] = self.activation_forward(self.model_state[layer]['linear_output'], self.model_state[layer]['activation_model'])
+                input_to_next_layer = self.model_state[layer]['activation_output']
+            else:
+                self.model_state[layer]['activation_model'] = 'softmax'
+                self.model_state[layer]['activation_output'] = self.activation_forward(self.model_state[layer]['linear_output'], self.model_state[layer]['activation_model'])
+        
+        return self.model_state['output_layer']['activation_output']
+
+    def sigmoid_backward(self, Z, upstream_gradient):
+        sig = self.sigmoid(Z)
+        return upstream_gradient * sig * (1 - sig)
+
+    def relu_backward(self, Z, upstream_gradient):
+        tmp = np.array(upstream_gradient, copy = True)
+        tmp[Z <= 0] = 0
+        return tmp
+    
+    def activation_backward(self, activation_output, upstream_gradient, activation_model):
+        if activation_model == 'sigmoid':
+            return self.sigmoid_backward(activation_output, upstream_gradient)
+        elif activation_model == 'relu':
+            return self.relu_backward(activation_output, upstream_gradient)
+        elif activation_model == 'softmax':
+            return self.sigmoid_backward(activation_output, upstream_gradient)
+        else:
+            raise Exception('Non-supported activation function')
+    
+    def linear_backward(self, linear_input, upstream_gradient):
+        gradient_weights = np.dot(upstream_gradient, linear_input.T)
+        gradient_b = np.sum(upstream_gradient, axis=1, keepdims=True)
+        return gradient_weights, gradient_b
+    
+    def model_backward(self, true_labels):
+        predictions = self.model_state['output_layer']['activation_output']
+        upstream_gradient = predictions - true_labels.T
+
+        for layer in reversed(list(self.model_state.keys())):
+            activation_model = self.model_state[layer]['activation_model']
+            #activation_output = self.model_state[layer]['activation_output']
+            linear_output = self.model_state[layer]['linear_output']
+            linear_input = self.model_state[layer]['linear_input']
+            upstream_gradient = self.activation_backward(linear_output, upstream_gradient, activation_model)
+            gradient_weights, gradient_b = self.linear_backward(linear_input, upstream_gradient)
+            self.model_state[layer]['gradient_weights'] = gradient_weights
+            self.model_state[layer]['gradient_b'] = gradient_b
+            upstream_gradient = self.model_state[layer]['weights'].T.dot(upstream_gradient)
+
+    def update_parameters(self, learning_rate):
+    # weights and offset_b: parameters computed (or initialised) in this iteration
+    # gradient_weights and gradient_offset: gradients of the cost function
+    # learning_rate: step size
+    # returns the updated parameters for the next iteration
+        for layer in self.model_state.keys():
+            self.model_state[layer]['weights'] = self.model_state[layer]['weights'] - (learning_rate * self.model_state[layer]['gradient_weights'])
+            self.model_state[layer]['offset_b'] = self.model_state[layer]['offset_b'] - (learning_rate * self.model_state[layer]['gradient_b'])
+
+    def compute_loss(self, true_labels):
+        predictions = self.model_state['output_layer']['activation_output'].T
+        #print('Predictions shape: ' + str(predictions.shape))
+        #print('Labels shape: ' + str(true_labels.shape))
+        loss = np.log(np.sum(np.exp(predictions), axis=1)) - np.sum(np.multiply(true_labels, predictions), axis=1)
+        return loss
+    
+    def predict(self, x, one_hot_encoded_label):
+        self.model_forward(x)
+        predictions = np.argmax(self.model_state['output_layer']['activation_output'], axis=0)
+        classification = np.argmax(one_hot_encoded_label, axis=1)
+        accuracy = (predictions == classification).mean()
+        return accuracy * 100
+    
+    def random_mini_batches(self, x, y, mini_batch_size):
+        mini_batches = []
+        number_full_batches = math.floor(self.number_images / mini_batch_size)
+        permutation = list(np.random.permutation(self.number_images))
+        shuffled_images = x[permutation, :]
+        shuffled_labels = y[permutation, :]
+
+        for batch in range(0, number_full_batches):
+            start_index = batch * mini_batch_size
+            stop_index = start_index + mini_batch_size
+            batch_images = shuffled_images[start_index : stop_index, :]
+            batch_labels = shuffled_labels[start_index : stop_index, :]
+            mini_batch = (batch_images, batch_labels)
+            mini_batches.append(mini_batch)
+
+        if self.number_images % mini_batch_size != 0:
+            batch_images = shuffled_images[number_full_batches * mini_batch_size : self.number_images, :]
+            batch_labels = shuffled_labels[number_full_batches * mini_batch_size : self.number_images, :]
+            mini_batch = (batch_images, batch_labels)
+            mini_batches.append(mini_batch)
+        
+        return mini_batches
+    
+    def train_model(self, x_train, y_train, iterations, learning_rate, mini_batch_size):
+        #accuracies = []
+        self.initialise_parameters(x_train, y_train)
+        while iterations > 0:
+            mini_batches = self.random_mini_batches(x_train, y_train, mini_batch_size)
+            for mini_batch in mini_batches:
+                (mini_x_train, mini_y_train) = mini_batch
+                self.model_forward(mini_x_train)
+                loss = self.compute_loss(mini_y_train)
+                cost = np.mean(loss, axis=0)
+                self.model_backward(mini_y_train)
+                self.update_parameters(learning_rate)
+
+            if iterations % 100 == 0:
+                print("\nTrain Accuracy: " + str(self.predict(x_train, y_train)))
+            if iterations % 10 == 0:
+                print("Cost: " + str(cost))
+                self.costs.append(cost)
+            iterations -= 1
+
+        print("Train Accuracy: " + str(self.predict(x_train, y_train)))
+
+if __name__ == '__main__':
+
+    folder_path = '/Users/marcellovendruscolo/Documents/vscode-workspace/DeepLearningForImageAnalysis/feedForward_backprop_neuralNetwork/MNIST'
+    x_train, y_train, x_test, y_test = load_mnist(folder_path)
+    # x_train = np.transpose(x_train)
+    # y_train = np.transpose(y_train)
+
+    print('X_train shape: ' + str(x_train.shape))
+    print('Y_train shape: ' + str(y_train.shape))
+
+    #model = {'layer_1': {'nodes': 30}} # Dictionary defining the number of nodes in each hidden layer
+    model = {}
+    neural_network = feedforward_backprop_neuralNetwork(model)
+    neural_network.train_model(x_train, y_train, iterations = 300, learning_rate = 0.005, mini_batch_size = 32)
+    test_accuracy = neural_network.predict(x_test, y_test)
+    print('\nTest accuracy: ' + str(test_accuracy))
