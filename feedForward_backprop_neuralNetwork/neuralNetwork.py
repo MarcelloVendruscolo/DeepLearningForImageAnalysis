@@ -7,7 +7,7 @@ class feedforward_backprop_neuralNetwork():
 
     def __init__(self, model):
         self.model = model
-        self.model_state = {}
+        self.model_state = {} # Dictionary where keys are the layers and values are dictionaries containing related variables
         self.number_images = 0
         self.costs_train = []
         self.costs_test = []
@@ -21,7 +21,7 @@ class feedforward_backprop_neuralNetwork():
         input_dimension = x_train.shape[1]
         number_classes = y_train.shape[1]
 
-        for layer in self.model.keys():
+        for layer in self.model.keys(): # Iterate through hidden layers and initialise their parameters
             self.model_state[layer] = {}
             output_dimension = model[layer]['nodes']
             weight_matrix = np.random.normal(mu, sigma, size=(output_dimension, input_dimension))
@@ -30,13 +30,14 @@ class feedforward_backprop_neuralNetwork():
             self.model_state[layer]['offset_b'] = offset_b
             input_dimension = output_dimension
         
-        self.model_state['output_layer'] = {}
+        # Define output layer and initialise its parameters
+        self.model_state['output_layer'] = {} 
         weight_matrix = np.random.normal(mu, sigma, size=(number_classes, input_dimension))
         offset_b = np.zeros((number_classes, 1))
         self.model_state['output_layer']['weights'] = weight_matrix
         self.model_state['output_layer']['offset_b'] = offset_b
 
-        print('\nNetwork Architecture\n')
+        print('\nNetwork Architecture:\n')
         for layer in self.model_state.keys():
             print('Layer: ' + str(layer))
             print('Weights shape: ' + str(self.model_state[layer]['weights'].shape))
@@ -66,9 +67,9 @@ class feedforward_backprop_neuralNetwork():
             raise Exception('Non-supported activation function')
     
     def model_forward(self, input_data):
-        input_to_next_layer = input_data.T
+        input_to_next_layer = input_data.T # The first layer receives the pixels of the images as input
 
-        for layer in self.model_state.keys():
+        for layer in self.model_state.keys(): # Iterate through all layers while performing the forward pass
             self.model_state[layer]['linear_input'] = input_to_next_layer
             self.model_state[layer]['linear_output'] = self.linear_forward(input_to_next_layer, self.model_state[layer]['weights'], self.model_state[layer]['offset_b'])
             
@@ -110,9 +111,8 @@ class feedforward_backprop_neuralNetwork():
         predictions = self.model_state['output_layer']['activation_output']
         upstream_gradient = predictions - true_labels.T
 
-        for layer in reversed(list(self.model_state.keys())):
+        for layer in reversed(list(self.model_state.keys())): # Iterate through all layers (reversed) while performing backprop
             activation_model = self.model_state[layer]['activation_model']
-            #activation_output = self.model_state[layer]['activation_output']
             linear_output = self.model_state[layer]['linear_output']
             linear_input = self.model_state[layer]['linear_input']
             upstream_gradient = self.activation_backward(linear_output, upstream_gradient, activation_model)
@@ -179,13 +179,25 @@ class feedforward_backprop_neuralNetwork():
         plt.legend()
         plt.show()
     
+    def plot_weights(self):
+        weight_matrix = self.model_state['output_layer']['weights']
+        figsize = [9.5, 5]
+        nrows, ncols = 2, 5
+        fig, ax = plt.subplots(nrows=nrows, ncols=ncols, figsize=figsize)
+        for counter, axi in enumerate(ax.flat):
+            img = weight_matrix[counter, :].reshape((28,28))
+            axi.imshow(img)
+            axi.set_title("Row: " +str(counter))
+        plt.show()
+
     def train_model(self, x_train, y_train, x_test, y_test, iterations, learning_rate, mini_batch_size):
         self.initialise_parameters(x_train, y_train)
-        for epoch in range(0, iterations):
+        print('Training started ...\n')
+        for epoch in range(0, iterations): # Iterate through the specified number of iterations (ephocs)
             ephoc_cost = 0
             ephoc_accuracy = 0
             mini_batches = self.random_mini_batches(x_train, y_train, mini_batch_size)
-            for mini_batch in mini_batches:
+            for mini_batch in mini_batches: # Iterate through all mini-batches for this particular ephoc
                 (mini_x_train, mini_y_train) = mini_batch
                 self.model_forward(mini_x_train)
                 loss = self.compute_loss(mini_y_train)
@@ -200,14 +212,18 @@ class feedforward_backprop_neuralNetwork():
             self.costs_test.append(np.mean(self.compute_loss(y_test), axis=0))
             
             if epoch % 10 == 0:
-                print("Cost: " + str(ephoc_cost/len(mini_batches)))
+                print("Train Cost: " + str(self.costs_train[epoch]))
             if epoch % 100 == 0 and epoch != 0:
-                print("Train Accuracy: " + str(self.predict(x_train, y_train)) + '\n')
-            elif epoch == iterations:
-                print("Train Accuracy: " + str(self.predict(x_train, y_train)) + '\n')
+                print("Train Accuracy: " + str(self.accuracies_train[epoch]) + '\n')
+            elif epoch == (iterations - 1):
+                print('Training completed!\n')
+                print("Final Train Accuracy: " + str(self.accuracies_train[epoch]))
+                print("Test Accuracy: " + str(self.accuracies_test[epoch]))
         
         self.plot_cost_iteration(iterations)
         self.plot_accuracy_iteration(iterations)
+        if len(self.model_state) == 1: # Print rows of weight matrix as 28x28 images for 1-layer network
+            self.plot_weights()
 
 if __name__ == '__main__':
 
@@ -217,9 +233,7 @@ if __name__ == '__main__':
     print('X_train shape: ' + str(x_train.shape))
     print('Y_train shape: ' + str(y_train.shape))
 
-    #model = {'layer_1': {'nodes': 30}} # Dictionary defining the number of nodes in each hidden layer
-    model = {}
+    # Dictionary defining the number of nodes in each hidden layer. Use model = {} for 1-layer network.
+    model = {'layer_1': {'nodes': 100}} 
     neural_network = feedforward_backprop_neuralNetwork(model)
-    neural_network.train_model(x_train, y_train, x_test, y_test, iterations=50, learning_rate=0.005, mini_batch_size=32)
-    #test_accuracy = neural_network.predict(x_test, y_test)
-    #print('Test accuracy: ' + str(test_accuracy))
+    neural_network.train_model(x_train, y_train, x_test, y_test, iterations=100, learning_rate=0.005, mini_batch_size=32)
