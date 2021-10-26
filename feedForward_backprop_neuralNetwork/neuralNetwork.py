@@ -234,6 +234,6 @@ if __name__ == '__main__':
     print('Y_train shape: ' + str(y_train.shape))
 
     # Dictionary defining the number of nodes in each hidden layer. Use model = {} for 1-layer network.
-    model = {'layer_1': {'nodes': 100}} 
+    model = {'layer_1': {'nodes': 100}}
     neural_network = feedforward_backprop_neuralNetwork(model)
     neural_network.train_model(x_train, y_train, x_test, y_test, iterations=100, learning_rate=0.005, mini_batch_size=32)
